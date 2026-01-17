@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, collection, doc, setDoc, getDocs, onSnapshot, query, 
+  getFirestore, collection, doc, onSnapshot, 
   deleteDoc, updateDoc, addDoc
 } from 'firebase/firestore';
 import { 
@@ -34,18 +34,22 @@ const appId = "visual-care-pro-v1"; // 应用唯一标识
 // --- 工具函数 ---
 const calculateAge = (dob) => {
   if (!dob) return 0;
-  const birthDate = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-  return age >= 0 ? age : 0;
+  try {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+    return age >= 0 ? age : 0;
+  } catch (e) { return 0; }
 };
 
 const formatDate = (dateValue) => {
   if (!dateValue) return '-';
-  const date = dateValue?.toDate ? dateValue.toDate() : new Date(dateValue);
-  return isNaN(date.getTime()) ? '-' : date.toLocaleDateString('zh-CN');
+  try {
+    const date = dateValue?.toDate ? dateValue.toDate() : new Date(dateValue);
+    return isNaN(date.getTime()) ? String(dateValue) : date.toLocaleDateString('zh-CN');
+  } catch (e) { return '-'; }
 };
 
 // --- 通用原子组件 ---
@@ -85,7 +89,10 @@ const PatientsView = ({ patients, onSave, onDelete }) => {
   const [formData, setFormData] = useState({ name: '', phone: '', dob: '', gender: '男', notes: '' });
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filtered = patients.filter(p => p.name.includes(searchTerm) || p.phone.includes(searchTerm));
+  // 修复：增加安全过滤，防止 p.name 或 p.phone 为空时崩溃
+  const filtered = patients.filter(p => 
+    (p.name || '').includes(searchTerm) || (p.phone || '').includes(searchTerm)
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -122,14 +129,14 @@ const PatientsView = ({ patients, onSave, onDelete }) => {
               {filtered.map(p => (
                 <tr key={p.id} className="hover:bg-blue-50/30 group transition-colors">
                   <td className="px-6 py-4">
-                    <div className="font-bold text-slate-700">{p.name}</div>
-                    <div className={`text-[10px] inline-block px-2 py-0.5 rounded-full mt-1 ${p.gender === '男' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{p.gender}</div>
+                    <div className="font-bold text-slate-700">{p.name || '未命名'}</div>
+                    <div className={`text-[10px] inline-block px-2 py-0.5 rounded-full mt-1 ${p.gender === '男' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>{p.gender || '男'}</div>
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <div className="text-slate-700 font-medium">{calculateAge(p.dob)} 岁</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{p.dob}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">{p.dob || '-'}</div>
                   </td>
-                  <td className="px-6 py-4 text-sm font-mono text-slate-600">{p.phone}</td>
+                  <td className="px-6 py-4 text-sm font-mono text-slate-600">{p.phone || '-'}</td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => {setFormData(p); setEditingId(p.id); setShowModal(true)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all"><Edit3 className="w-4 h-4" /></button>
@@ -228,14 +235,14 @@ const RefractionView = ({ patients, exams, onSave, onDelete }) => {
                   <td className="px-6 py-4 font-bold text-slate-700">{patients.find(p => p.id === ex.patientId)?.name || '未知'}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-4 text-xs">
-                      <div className="px-2 py-1 bg-blue-50 rounded border border-blue-100 text-blue-800 font-mono">R: {ex.od_al || '未测'}mm</div>
-                      <div className="px-2 py-1 bg-teal-50 rounded border border-teal-100 text-teal-800 font-mono">L: {ex.os_al || '未测'}mm</div>
+                      <div className="px-2 py-1 bg-blue-50 rounded border border-blue-100 text-blue-800 font-mono">R: {ex.od_al || '-'}mm</div>
+                      <div className="px-2 py-1 bg-teal-50 rounded border border-teal-100 text-teal-800 font-mono">L: {ex.os_al || '-'}mm</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => {setFormData(ex); setEditingId(ex.id); setShowModal(true)}} className="p-2 text-slate-400 hover:text-blue-600"><Edit3 className="w-4 h-4" /></button>
-                      <button onClick={() => onDelete('exams', ex.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => {setFormData(ex); setEditingId(ex.id); setShowModal(true)}} className="p-2 text-slate-400 hover:text-blue-600 transition-all"><Edit3 className="w-4 h-4" /></button>
+                      <button onClick={() => onDelete('exams', ex.id)} className="p-2 text-slate-400 hover:text-red-600 transition-all"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -269,33 +276,28 @@ const RefractionView = ({ patients, exams, onSave, onDelete }) => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="p-6 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-5">
-                <h4 className="font-bold text-blue-800 flex items-center gap-2"><div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div> 右眼 (OD)</h4>
+                <h4 className="font-bold text-blue-800 border-b border-blue-200 pb-2">右眼 (OD)</h4>
                 <div className="grid grid-cols-3 gap-3">
                   <Input label="球镜 SPH" type="number" step="0.25" value={formData.od_sphere} onChange={e => setFormData({...formData, od_sphere: e.target.value})} />
                   <Input label="柱镜 CYL" type="number" step="0.25" value={formData.od_cylinder} onChange={e => setFormData({...formData, od_cylinder: e.target.value})} />
                   <Input label="轴位 AXIS" type="number" value={formData.od_axis} onChange={e => setFormData({...formData, od_axis: e.target.value})} />
-                </div>
-                <div className="grid grid-cols-3 gap-3">
                   <Input label="眼轴 AL" type="number" step="0.01" value={formData.od_al} onChange={e => setFormData({...formData, od_al: e.target.value})} />
-                  <Input label="K1 (曲率)" type="number" step="0.01" value={formData.od_k1} onChange={e => setFormData({...formData, od_k1: e.target.value})} />
-                  <Input label="K2 (曲率)" type="number" step="0.01" value={formData.od_k2} onChange={e => setFormData({...formData, od_k2: e.target.value})} />
+                  <Input label="K1" type="number" step="0.01" value={formData.od_k1} onChange={e => setFormData({...formData, od_k1: e.target.value})} />
+                  <Input label="K2" type="number" step="0.01" value={formData.od_k2} onChange={e => setFormData({...formData, od_k2: e.target.value})} />
                 </div>
               </div>
               <div className="p-6 bg-teal-50/50 rounded-2xl border border-teal-100 space-y-5">
-                <h4 className="font-bold text-teal-800 flex items-center gap-2"><div className="w-2 h-2 bg-teal-600 rounded-full animate-pulse"></div> 左眼 (OS)</h4>
+                <h4 className="font-bold text-teal-800 border-b border-teal-200 pb-2">左眼 (OS)</h4>
                 <div className="grid grid-cols-3 gap-3">
                   <Input label="球镜 SPH" type="number" step="0.25" value={formData.os_sphere} onChange={e => setFormData({...formData, os_sphere: e.target.value})} />
                   <Input label="柱镜 CYL" type="number" step="0.25" value={formData.os_cylinder} onChange={e => setFormData({...formData, os_cylinder: e.target.value})} />
                   <Input label="轴位 AXIS" type="number" value={formData.os_axis} onChange={e => setFormData({...formData, os_axis: e.target.value})} />
-                </div>
-                <div className="grid grid-cols-3 gap-3">
                   <Input label="眼轴 AL" type="number" step="0.01" value={formData.os_al} onChange={e => setFormData({...formData, os_al: e.target.value})} />
-                  <Input label="K1 (曲率)" type="number" step="0.01" value={formData.os_k1} onChange={e => setFormData({...formData, os_k1: e.target.value})} />
-                  <Input label="K2 (曲率)" type="number" step="0.01" value={formData.os_k2} onChange={e => setFormData({...formData, os_k2: e.target.value})} />
+                  <Input label="K1" type="number" step="0.01" value={formData.os_k1} onChange={e => setFormData({...formData, os_k1: e.target.value})} />
+                  <Input label="K2" type="number" step="0.01" value={formData.os_k2} onChange={e => setFormData({...formData, os_k2: e.target.value})} />
                 </div>
               </div>
             </div>
-            <Input label="临床备注" placeholder="如：眼底正常、建议离焦镜片..." value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
             <div className="flex gap-4 pt-4 sticky bottom-0 bg-white border-t border-slate-100 py-4">
               <Button variant="secondary" className="flex-1" onClick={() => setShowModal(false)}>取消返回</Button>
               <Button className="flex-1" icon={Save}>提交验光档案</Button>
@@ -321,9 +323,9 @@ const InventoryView = ({ products, onSave, onDelete }) => {
           <tbody className="divide-y divide-slate-50">
             {products.map(p => (
               <tr key={p.id} className="hover:bg-slate-50 group">
-                <td className="px-6 py-4"><div className="font-bold text-slate-700">{p.name}</div><div className="text-xs text-slate-400">{p.brand} {p.model}</div></td>
-                <td className="px-6 py-4 font-mono font-bold text-blue-600">¥{p.price}</td>
-                <td className="px-6 py-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${p.stock < 5 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-600'}`}>{p.stock}</span></td>
+                <td className="px-6 py-4"><div className="font-bold text-slate-700">{p.name || '未命名'}</div><div className="text-xs text-slate-400">{p.brand} {p.model}</div></td>
+                <td className="px-6 py-4 font-mono font-bold text-blue-600">¥{p.price || 0}</td>
+                <td className="px-6 py-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${p.stock < 5 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-600'}`}>{p.stock || 0}</span></td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => {setFormData(p); setEditingId(p.id); setShowModal(true)}} className="p-2 text-slate-400 hover:text-blue-600 transition-all"><Edit3 className="w-4 h-4" /></button>
@@ -375,7 +377,7 @@ const SalesView = ({ patients, products, orders, onSave, onDelete }) => {
               <tr key={o.id} className="hover:bg-slate-50 group">
                 <td className="px-6 py-4 text-sm font-medium text-slate-500">{o.orderDate}</td>
                 <td className="px-6 py-4 font-bold text-slate-700">{patients.find(p => p.id === o.patientId)?.name || '散客'}</td>
-                <td className="px-6 py-4 font-mono font-black text-emerald-600">¥{o.totalAmount}</td>
+                <td className="px-6 py-4 font-mono font-black text-emerald-600">¥{o.totalAmount || 0}</td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => {setFormData(o); setEditingId(o.id); setShowModal(true)}} className="p-2 text-slate-400 hover:text-blue-600 transition-all"><Edit3 className="w-4 h-4" /></button>
@@ -431,17 +433,7 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [exams, setExams] = useState([]);
 
-  // 样式自愈：确保 Tailwind CDN 被加载
-  useEffect(() => {
-    if (!document.getElementById('tailwind-cdn')) {
-      const script = document.createElement('script');
-      script.id = 'tailwind-cdn';
-      script.src = "https://cdn.tailwindcss.com";
-      document.head.appendChild(script);
-    }
-  }, []);
-
-  // 1. 初始化 Auth
+  // 初始化 Auth
   useEffect(() => {
     let isMounted = true;
     signInAnonymously(auth).then(() => {
@@ -458,14 +450,29 @@ export default function App() {
     return () => { isMounted = false; };
   }, []);
 
-  // 2. 实时数据监听
+  // 实时数据监听 (核心：增加了 appId 路径校验和 user 依赖)
   useEffect(() => {
     if (!user || !isReady) return;
     
-    const unsubP = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'patients'), s => setPatients(s.docs.map(d => ({id: d.id, ...d.data()}))));
-    const unsubPr = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), s => setProducts(s.docs.map(d => ({id: d.id, ...d.data()}))));
-    const unsubO = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => setOrders(s.docs.map(d => ({id: d.id, ...d.data()}))));
-    const unsubE = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), s => setExams(s.docs.map(d => ({id: d.id, ...d.data()}))));
+    // 监听会员列表
+    const unsubP = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'patients'), s => {
+      setPatients(s.docs.map(d => ({id: d.id, ...d.data()})));
+    }, err => console.error("Snapshot Patients Error:", err));
+
+    // 监听商品列表
+    const unsubPr = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), s => {
+      setProducts(s.docs.map(d => ({id: d.id, ...d.data()})));
+    }, err => console.error("Snapshot Products Error:", err));
+
+    // 监听销售单
+    const unsubO = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => {
+      setOrders(s.docs.map(d => ({id: d.id, ...d.data()})));
+    }, err => console.error("Snapshot Orders Error:", err));
+
+    // 监听检查单
+    const unsubE = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), s => {
+      setExams(s.docs.map(d => ({id: d.id, ...d.data()})));
+    }, err => console.error("Snapshot Exams Error:", err));
     
     return () => { unsubP(); unsubPr(); unsubO(); unsubE(); };
   }, [user, isReady]);
@@ -481,7 +488,7 @@ export default function App() {
   };
 
   const handleDelete = async (col, id) => {
-    if (confirm('确定要删除这条记录吗？此操作无法撤销。')) {
+    if (confirm('确定要彻底删除这条记录吗？数据将无法恢复。')) {
       try {
         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', col, id));
       } catch (err) { console.error("Delete error:", err); }
@@ -494,7 +501,7 @@ export default function App() {
         <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
         <Eye className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-600 w-6 h-6" />
       </div>
-      <p className="mt-6 text-slate-600 font-bold tracking-widest animate-pulse">VISUALCARE PRO 安全连接中...</p>
+      <p className="mt-6 text-slate-600 font-bold tracking-widest animate-pulse uppercase">VisualCare 数据加载中...</p>
     </div>
   );
 
@@ -528,7 +535,7 @@ export default function App() {
                   : 'text-slate-500 hover:bg-blue-50 hover:text-blue-600'
               }`}
             >
-              <item.icon className={`w-5 h-5 ${view === item.id ? 'animate-pulse' : ''}`} />
+              <item.icon className="w-5 h-5" />
               <span className="font-bold text-sm">{item.label}</span>
               {view === item.id && <ChevronRight className="ml-auto w-4 h-4 opacity-50" />}
             </button>
@@ -539,9 +546,9 @@ export default function App() {
           <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">系统已就绪</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">云端已同步</p>
             </div>
-            <p className="text-[10px] text-slate-400 font-mono mt-2 truncate max-w-full">ID: {user?.uid}</p>
+            <p className="text-[10px] text-slate-400 font-mono mt-2 truncate max-w-full">SID: {user?.uid.substring(0, 12)}...</p>
           </div>
         </div>
       </aside>
@@ -570,7 +577,7 @@ export default function App() {
                 <Card className="p-8 border-l-8 border-emerald-500">
                   <p className="text-slate-400 text-xs font-black uppercase tracking-widest">今日营收流水</p>
                   <div className="flex items-end gap-3 mt-2">
-                    <p className="text-5xl font-black text-emerald-600">¥{orders.reduce((s,o)=>s+o.totalAmount,0)}</p>
+                    <p className="text-5xl font-black text-emerald-600">¥{orders.reduce((s,o)=>s+(o.totalAmount || 0),0).toLocaleString()}</p>
                     <p className="text-slate-400 text-sm mb-1 font-bold">已入账</p>
                   </div>
                 </Card>
@@ -592,14 +599,15 @@ export default function App() {
                   <div className="space-y-4">
                     {exams.filter(e => e.examType === '近视防控').slice(0, 5).map(e => {
                       const nextDate = new Date(e.examDate); nextDate.setMonth(nextDate.getMonth() + 3);
+                      const pName = patients.find(pat => pat.id === e.patientId)?.name || '未知客户';
                       return (
                         <div key={e.id} className="flex justify-between items-center p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-lg transition-all group">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center font-bold text-slate-400 group-hover:text-blue-600 transition-colors">
-                              {patients.find(pat => pat.id === e.patientId)?.name[0] || '?'}
+                              {pName[0]}
                             </div>
                             <div>
-                              <p className="font-bold text-slate-700">{patients.find(pat => pat.id === e.patientId)?.name || '未知'}</p>
+                              <p className="font-bold text-slate-700">{pName}</p>
                               <p className="text-[10px] text-slate-400 font-bold uppercase">上期: {e.examDate}</p>
                             </div>
                           </div>
@@ -610,35 +618,19 @@ export default function App() {
                         </div>
                       );
                     })}
-                    {exams.filter(e => e.examType === '近视防控').length === 0 && (
-                      <div className="text-center py-10">
-                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 className="text-slate-200" /></div>
-                        <p className="text-slate-400 font-bold">暂无需要随访的会员</p>
-                      </div>
-                    )}
                   </div>
                 </Card>
 
                 <Card className="p-8 bg-slate-800 border-none text-white relative overflow-hidden group">
                   <div className="relative z-10">
-                    <h3 className="text-xl font-black mb-2 flex items-center gap-3"><AlertCircle /> 系统专业说明</h3>
+                    <h3 className="text-xl font-black mb-2 flex items-center gap-3"><AlertCircle /> 随访监测说明</h3>
                     <p className="text-slate-400 text-sm leading-relaxed mb-8">
-                      本系统采用《2025视光临床标准》构建，建议录入时确保 AL（眼轴）数据精确到 0.01mm，以提升随访监测的准确性。
+                      系统已根据《2025视光临床标准》为您自动筛选需要每 90 天进行眼轴与曲率复测的青少年案例。
                     </p>
                     <div className="space-y-4">
-                      <div className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-colors">
-                        <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400"><Tag className="w-5 h-5" /></div>
-                        <div>
-                          <p className="font-bold text-sm">自动复查提醒</p>
-                          <p className="text-[10px] text-slate-400 mt-1">近视防控项目将自动按 90 天周期加入看板提醒。</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-colors">
-                        <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400"><TrendingUp className="w-5 h-5" /></div>
-                        <div>
-                          <p className="font-bold text-sm">云端实时同步</p>
-                          <p className="text-[10px] text-slate-400 mt-1">所有设备登录即见最新数据，无需手动保存导出。</p>
-                        </div>
+                      <div className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/10">
+                        <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400"><TrendingUp className="w-5 h-5" /></div>
+                        <div><p className="font-bold text-sm">云端实时同步</p><p className="text-[10px] text-slate-400 mt-1">数据已实时加密传输至 Firebase 保险柜。</p></div>
                       </div>
                     </div>
                   </div>
