@@ -14,7 +14,7 @@ import {
   getAuth, signInAnonymously, onAuthStateChanged 
 } from 'firebase/auth';
 
-// --- Firebase 专属配置 (已整合您的配置) ---
+// --- Firebase 专属配置 (保持您的配置) ---
 const firebaseConfig = {
   apiKey: "AIzaSyAxLO4oAbOWGsNQ0bRR8js1o0vzfNwRwyI",
   authDomain: "myeyeshop-f1fab.firebaseapp.com",
@@ -25,11 +25,14 @@ const firebaseConfig = {
   measurementId: "G-YZ4PL510GL"
 };
 
-// 初始化 Firebase
+// 初始化服务
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
-const appId = "visual-care-pro-v1"; // 应用唯一标识
+
+// 【核心修复】确保跨设备同步：App ID 必须在所有设备上完全一致
+// 如果您在电脑预览里用的是一套代码，在 Vercel 网页用的是另一套，请确保这里的字符串一模一样
+const appId = "my-optical-shared-v1"; 
 
 // --- 工具函数 ---
 const calculateAge = (dob) => {
@@ -82,17 +85,13 @@ const Input = ({ label, required, ...props }) => (
 
 // --- 模块视图 ---
 
-// 1. 档案管理
 const PatientsView = ({ patients, onSave, onDelete }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', phone: '', dob: '', gender: '男', notes: '' });
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 修复：增加安全过滤，防止 p.name 或 p.phone 为空时崩溃
-  const filtered = patients.filter(p => 
-    (p.name || '').includes(searchTerm) || (p.phone || '').includes(searchTerm)
-  );
+  const filtered = patients.filter(p => (p.name || '').includes(searchTerm) || (p.phone || '').includes(searchTerm));
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -192,7 +191,6 @@ const PatientsView = ({ patients, onSave, onDelete }) => {
   );
 };
 
-// 2. 视光检查
 const RefractionView = ({ patients, exams, onSave, onDelete }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -309,7 +307,6 @@ const RefractionView = ({ patients, exams, onSave, onDelete }) => {
   );
 };
 
-// 3. 库存管理
 const InventoryView = ({ products, onSave, onDelete }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -361,7 +358,6 @@ const InventoryView = ({ products, onSave, onDelete }) => {
   );
 };
 
-// 4. 销售管理
 const SalesView = ({ patients, products, orders, onSave, onDelete }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -427,30 +423,25 @@ export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [view, setView] = useState('dashboard');
   
-  // 数据状态
   const [patients, setPatients] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [exams, setExams] = useState([]);
 
-  // 初始化 Auth
+  // 1. 初始化 Auth - 核心修复：独立监听 Auth 状态
   useEffect(() => {
-    let isMounted = true;
-    signInAnonymously(auth).then(() => {
-      onAuthStateChanged(auth, (u) => {
-        if (isMounted && u) {
-          setUser(u);
-          setIsReady(true);
-        }
-      });
-    }).catch(err => {
-      console.error("Auth Init Error:", err);
-      setIsReady(true);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setUser(u);
+        setIsReady(true);
+      } else {
+        signInAnonymously(auth).catch(err => console.error("Auth Error:", err));
+      }
     });
-    return () => { isMounted = false; };
+    return unsub;
   }, []);
 
-  // 实时数据监听 (核心：增加了 appId 路径校验和 user 依赖)
+  // 2. 实时数据监听 (核心：强制绑定 appId)
   useEffect(() => {
     if (!user || !isReady) return;
     
@@ -459,17 +450,14 @@ export default function App() {
       setPatients(s.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("Snapshot Patients Error:", err));
 
-    // 监听商品列表
     const unsubPr = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), s => {
       setProducts(s.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("Snapshot Products Error:", err));
 
-    // 监听销售单
     const unsubO = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => {
       setOrders(s.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("Snapshot Orders Error:", err));
 
-    // 监听检查单
     const unsubE = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), s => {
       setExams(s.docs.map(d => ({id: d.id, ...d.data()})));
     }, err => console.error("Snapshot Exams Error:", err));
@@ -501,7 +489,7 @@ export default function App() {
         <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
         <Eye className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-600 w-6 h-6" />
       </div>
-      <p className="mt-6 text-slate-600 font-bold tracking-widest animate-pulse uppercase">VisualCare 数据加载中...</p>
+      <p className="mt-6 text-slate-600 font-bold tracking-widest animate-pulse uppercase">VisualCare 数据同步中...</p>
     </div>
   );
 
