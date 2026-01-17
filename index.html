@@ -1,14 +1,50 @@
 <!DOCTYPE html>
-
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>VisualCare Pro - 眼镜店管理系统</title>
-<script src="https://www.google.com/search?q=https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>VisualCare Pro - 专业视光管理系统</title>
+    
+    <!-- 样式核心：引入 Tailwind CSS，这是决定界面是否好看的关键 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 字体优化：引入现代化的 Inter 字体，让文字更清晰 -->
+    <style type="text/css">
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* 优化滚动条样式，使其更具现代感 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f8fafc; /* 背景设为淡淡的灰色，符合医疗软件审美 */
+            -webkit-font-smoothing: antialiased;
+        }
+    </style>
 </head>
 <body>
-<div id="root"></div>
-<script type="module" src="/src/main.jsx"></script>
+    <!-- React 程序的挂载点，必须保持 id="root" -->
+    <div id="root"></div>
+    
+    <!-- 脚本入口：连接到您的核心逻辑代码 -->
+    <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
