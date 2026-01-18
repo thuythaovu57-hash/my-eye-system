@@ -3,7 +3,7 @@ import {
   Users, Plus, Search, Trash2, Edit3, Calendar, Eye, LayoutDashboard, 
   Package, ShoppingCart, Settings, ChevronRight, UserPlus, ArrowRight, 
   Save, X, Loader2, CheckCircle2, Filter, TrendingUp, History, Tag, 
-  Clock, AlertCircle, Bell
+  Clock, AlertCircle, Bell, RefreshCcw
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -25,13 +25,12 @@ const firebaseConfig = {
   measurementId: "G-YZ4PL510GL"
 };
 
-// 初始化服务
+// 初始化 Firebase
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 
-// 【核心修复】确保跨设备同步：App ID 必须在所有设备上完全一致
-// 如果您在电脑预览里用的是一套代码，在 Vercel 网页用的是另一套，请确保这里的字符串一模一样
+// 【核心修复】App ID 统一标识
 const appId = "my-optical-shared-v1"; 
 
 // --- 工具函数 ---
@@ -85,6 +84,7 @@ const Input = ({ label, required, ...props }) => (
 
 // --- 模块视图 ---
 
+// 1. 档案管理
 const PatientsView = ({ patients, onSave, onDelete }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -138,8 +138,8 @@ const PatientsView = ({ patients, onSave, onDelete }) => {
                   <td className="px-6 py-4 text-sm font-mono text-slate-600">{p.phone || '-'}</td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => {setFormData(p); setEditingId(p.id); setShowModal(true)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all"><Edit3 className="w-4 h-4" /></button>
-                      <button onClick={() => onDelete('patients', p.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => {setFormData(p); setEditingId(p.id); setShowModal(true)}} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 className="w-4 h-4" /></button>
+                      <button onClick={() => onDelete('patients', p.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -421,6 +421,7 @@ const SalesView = ({ patients, products, orders, onSave, onDelete }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState(null);
   const [view, setView] = useState('dashboard');
   
   const [patients, setPatients] = useState([]);
@@ -428,39 +429,55 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [exams, setExams] = useState([]);
 
-  // 1. 初始化 Auth - 核心修复：独立监听 Auth 状态
+  // 1. 初始化 Auth - 增加超时处理
   useEffect(() => {
+    let isMounted = true;
+    
+    // 如果 8 秒内还没连接成功，标记一个网络提示
+    const timeout = setTimeout(() => {
+      if (isMounted && !isReady) {
+        setError("正在尝试建立安全连接，请检查网络...");
+      }
+    }, 8000);
+
     const unsub = onAuthStateChanged(auth, (u) => {
       if (u) {
-        setUser(u);
-        setIsReady(true);
+        if (isMounted) {
+          setUser(u);
+          setIsReady(true);
+          setError(null);
+          clearTimeout(timeout);
+        }
       } else {
-        signInAnonymously(auth).catch(err => console.error("Auth Error:", err));
+        signInAnonymously(auth).catch(err => {
+          console.error("Auth Error:", err);
+          if (isMounted) setError("无法连接数据库，请检查域名解析是否生效");
+        });
       }
     });
-    return unsub;
-  }, []);
 
-  // 2. 实时数据监听 (核心：强制绑定 appId)
+    return () => { isMounted = false; unsub(); clearTimeout(timeout); };
+  }, [isReady]);
+
+  // 2. 实时数据监听
   useEffect(() => {
     if (!user || !isReady) return;
     
-    // 监听会员列表
     const unsubP = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'patients'), s => {
       setPatients(s.docs.map(d => ({id: d.id, ...d.data()})));
-    }, err => console.error("Snapshot Patients Error:", err));
+    }, err => console.error("Sync Patients Error:", err));
 
     const unsubPr = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'products'), s => {
       setProducts(s.docs.map(d => ({id: d.id, ...d.data()})));
-    }, err => console.error("Snapshot Products Error:", err));
+    }, err => console.error("Sync Products Error:", err));
 
     const unsubO = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), s => {
       setOrders(s.docs.map(d => ({id: d.id, ...d.data()})));
-    }, err => console.error("Snapshot Orders Error:", err));
+    }, err => console.error("Sync Orders Error:", err));
 
     const unsubE = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), s => {
       setExams(s.docs.map(d => ({id: d.id, ...d.data()})));
-    }, err => console.error("Snapshot Exams Error:", err));
+    }, err => console.error("Sync Exams Error:", err));
     
     return () => { unsubP(); unsubPr(); unsubO(); unsubE(); };
   }, [user, isReady]);
@@ -483,13 +500,24 @@ export default function App() {
     }
   };
 
+  // 增加强制重试功能
+  const handleRetry = () => {
+    window.location.reload();
+  };
+
   if (!isReady) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
       <div className="relative">
         <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
         <Eye className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-600 w-6 h-6" />
       </div>
       <p className="mt-6 text-slate-600 font-bold tracking-widest animate-pulse uppercase">VisualCare 数据同步中...</p>
+      {error && (
+        <div className="mt-8 space-y-4">
+          <p className="text-red-500 text-sm font-medium">{error}</p>
+          <Button variant="secondary" onClick={handleRetry} icon={RefreshCcw}>刷新重试</Button>
+        </div>
+      )}
     </div>
   );
 
